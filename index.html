@@ -982,14 +982,23 @@ async function renderMyTransactions() {
         <tr><th>FECHA</th><th>TIPO</th><th>TRABAJADORA</th><th>CONCEPTO</th><th>MONTO</th></tr>
         ${txs.length===0
           ? `<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:20px">Sin movimientos esta semana</td></tr>`
-          : [...txs].reverse().map(tx=>`
-          <tr>
+          : [...txs].reverse().map(tx=>{
+            const isAdvance = !tx.is_income && tx.worker_name;
+            return `
+          <tr style="${isAdvance?'background:rgba(247,196,106,0.05)':''}">
             <td style="font-family:var(--mono);font-size:12px">${fmtDate(tx.date)}</td>
-            <td><span class="badge ${tx.is_income?'badge-income':'badge-expense'}">${tx.is_income?'INGRESO':'EGRESO'}</span></td>
+            <td>
+              ${tx.is_income
+                ? `<span class="badge badge-income">INGRESO</span>`
+                : isAdvance
+                  ? `<span class="badge" style="background:rgba(247,196,106,0.2);color:var(--accent2)">ADELANTO</span>`
+                  : `<span class="badge badge-expense">EGRESO</span>`
+              }
+            </td>
             <td style="font-weight:${tx.worker_name?'700':'400'};color:${tx.worker_name?'var(--accent2)':'var(--muted)'}">${tx.worker_name||'—'}</td>
             <td>${tx.concept||''}</td>
             <td style="font-family:var(--mono);color:${tx.is_income?'var(--success)':'var(--danger)'}">Bs ${fmt(tx.amount)}</td>
-          </tr>`).join('')}
+          </tr>`}).join('')}
       </table>
     </div>
   </div>`;
@@ -1042,7 +1051,9 @@ async function addExpense() {
 
 function myNav(dir) { currentWeek = dir<0 ? prevWeek(currentWeek) : nextWeek(currentWeek); renderTab('myTransactions'); }
 async function addWorkerAdvance() {
-  const isAdmin = currentUser.role === 'admin';
+  const u      = currentUser;
+  const wk     = currentWeek;
+  const isAdmin = u.role === 'admin';
   const dateEl  = document.getElementById('advDate');
   const date    = (isAdmin && dateEl && dateEl.value) ? dateEl.value : today();
   const worker  = document.getElementById('advWorker')?.value || '';
@@ -1053,11 +1064,23 @@ async function addWorkerAdvance() {
   if (!concept) { alert('Escribe el concepto (adelanto, comida, etc.).'); return; }
   if (amount <= 0) { alert('Ingresa un monto válido.'); return; }
 
-  // Buscar si la trabajadora tiene usuario en external_ledger
-  const workerUser = allUsers.find(u => u.role === 'external' && u.name.toLowerCase() === worker.toLowerCase());
+  const fullConcept = 'Adelanto ' + worker + ' - ' + concept;
 
+  // 1. Guardar en transactions para que aparezca en Movimientos del empleado y en admin
+  await sb('transactions', 'POST', {
+    id: genId(),
+    user_id: u.id,
+    week_key: wk,
+    date,
+    concept: fullConcept,
+    amount,
+    is_income: false,
+    worker_name: worker
+  });
+
+  // 2. Guardar en external_ledger para descontar del saldo de la chica
+  const workerUser = allUsers.find(usr => usr.role === 'external' && usr.name.toLowerCase() === worker.toLowerCase());
   if (workerUser) {
-    // Guardar en external_ledger como egreso (descuenta de su saldo)
     await sb('external_ledger', 'POST', {
       id: genId(),
       user_id: workerUser.id,
@@ -1066,9 +1089,6 @@ async function addWorkerAdvance() {
       amount,
       is_income: false
     });
-  } else {
-    // Si no tiene usuario, guardar igual con un id genérico para no perder el registro
-    alert('Nota: ' + worker + ' no tiene usuario en el sistema. El gasto se registra pero no afecta su saldo individual.\nCrea un usuario externo para ' + worker + ' en la pestaña Usuarios para rastrear su saldo.');
   }
 
   // Limpiar campos
@@ -1076,8 +1096,6 @@ async function addWorkerAdvance() {
   document.getElementById('advAmount').value  = '';
   document.getElementById('advWorker').value  = '';
 
-  // Confirmación visual
-  alert('✅ Registrado: ' + worker + ' - ' + concept + ' - Bs ' + amount);
   renderTab('myTransactions');
 }
 
