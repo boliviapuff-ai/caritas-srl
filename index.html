@@ -373,6 +373,7 @@ function renderApp() {
       {id:'employees', label:'👥 Empleados'},
       {id:'external', label:'⚡ Personal Externo'},
       {id:'users', label:'🔑 Usuarios'},
+      {id:'cotejo', label:'🔍 Cotejo'},
     ];
   } else if (u.role === 'employee') {
     tabDefs = [
@@ -418,6 +419,7 @@ async function renderTab(tabId) {
     case 'myBudget': content.innerHTML = await renderMyBudget(); break;
     case 'externalSelf': content.innerHTML = await renderExternalSelf(); break;
     case 'myCommission': content.innerHTML = await renderMyCommission(); break;
+    case 'cotejo': content.innerHTML = await renderCotejo(); break;
   }
 }
 
@@ -1315,6 +1317,149 @@ async function renderExternalViewer() {
 // ============================================================
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+
+// ============================================================
+// COTEJO — Comparar empleado vs trabajadora
+// ============================================================
+async function renderCotejo() {
+  const wk = currentWeek;
+  const txs    = await sb('transactions','GET',null,`?week_key=eq.${wk}`);
+  const ledger = await sb('external_ledger');
+  const employees = allUsers.filter(u=>u.role==='employee');
+  const externals  = allUsers.filter(u=>u.role==='external');
+
+  // Agrupar ingresos del empleado por trabajadora
+  const empByWorker = {};
+  WORKER_NAMES.forEach(w => empByWorker[w] = { income: 0, advances: 0, entries: [] });
+  txs.forEach(tx => {
+    if (!tx.worker_name) return;
+    if (!empByWorker[tx.worker_name]) empByWorker[tx.worker_name] = { income:0, advances:0, entries:[] };
+    if (tx.is_income) {
+      empByWorker[tx.worker_name].income += parseFloat(tx.amount||0);
+    } else {
+      empByWorker[tx.worker_name].advances += parseFloat(tx.amount||0);
+    }
+    empByWorker[tx.worker_name].entries.push(tx);
+  });
+
+  // Agrupar lo que la chica registró en su hoja
+  const extByWorker = {};
+  externals.forEach(u => {
+    const entries = ledger.filter(e=>e.user_id===u.id);
+    extByWorker[u.name] = {
+      income:   entries.filter(e=>e.is_income).reduce((s,e)=>s+parseFloat(e.amount||0),0),
+      expenses: entries.filter(e=>!e.is_income).reduce((s,e)=>s+parseFloat(e.amount||0),0),
+      entries
+    };
+  });
+
+  const rows = WORKER_NAMES.map(name => {
+    const emp = empByWorker[name] || { income:0, advances:0 };
+    const ext = extByWorker[name] || { income:0, expenses:0 };
+    const diffIncome   = emp.income - ext.income;
+    const ok = Math.abs(diffIncome) < 0.01;
+    return { name, emp, ext, diffIncome, ok };
+  }).filter(r => r.emp.income > 0 || r.ext.income > 0);
+
+  return `
+  <div class="section">
+    <div class="sec-header">
+      <div class="sec-title">🔍 Cotejo — Empleado vs Trabajadora</div>
+      <div class="week-nav">
+        <button onclick="cotejoNav(-1)">&#x2039;</button>
+        <span class="week-label">${weekLabel(wk)}</span>
+        <button onclick="cotejoNav(1)">&#x203a;</button>
+      </div>
+    </div>
+    <div class="alert alert-info" style="margin-bottom:20px">
+      Compara lo que anotó el empleado con lo que registró cada trabajadora. 
+      <b>Verde = coincide ✅ | Rojo = hay diferencia ⚠️</b>
+    </div>
+
+    ${rows.length === 0
+      ? `<div style="color:var(--muted);font-family:var(--mono);padding:40px;text-align:center">Sin movimientos esta semana</div>`
+      : rows.map(r => `
+    <div class="card" style="margin-bottom:16px;border-left:4px solid ${r.ok?'var(--success)':'var(--danger)'}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+        <div style="font-size:18px;font-weight:800">${r.name}</div>
+        <span style="background:${r.ok?'#6af7b020':'#f76a6a20'};color:${r.ok?'var(--success)':'var(--danger)'};
+               border:1px solid ${r.ok?'#6af7b040':'#f76a6a40'};padding:5px 16px;border-radius:20px;font-weight:700;font-family:var(--mono)">
+          ${r.ok ? '✅ Coincide' : '⚠️ Diferencia de Bs ' + fmt(Math.abs(r.diffIncome))}
+        </span>
+      </div>
+
+      <div class="grid-3" style="margin-bottom:16px">
+        <div class="card" style="border:1px solid var(--border)">
+          <div class="card-title">👥 EMPLEADO REGISTRÓ</div>
+          <div style="font-family:var(--mono);font-size:22px;font-weight:800;color:var(--success)">Bs ${fmt(r.emp.income)}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">Adelantos dados: Bs ${fmt(r.emp.advances)}</div>
+        </div>
+        <div class="card" style="border:1px solid var(--border)">
+          <div class="card-title">⚡ TRABAJADORA REGISTRÓ</div>
+          <div style="font-family:var(--mono);font-size:22px;font-weight:800;color:var(--accent2)">Bs ${fmt(r.ext.income)}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">Egresos propios: Bs ${fmt(r.ext.expenses)}</div>
+        </div>
+        <div class="card" style="border:1px solid ${r.ok?'var(--success)':'var(--danger)'}">
+          <div class="card-title">DIFERENCIA</div>
+          <div style="font-family:var(--mono);font-size:22px;font-weight:800;color:${r.ok?'var(--success)':'var(--danger)'}">
+            ${r.diffIncome > 0 ? '+' : ''}Bs ${fmt(r.diffIncome)}
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">
+            ${r.ok ? 'Todo cuadra' : r.diffIncome > 0 ? 'Empleado registró más' : 'Trabajadora registró más'}
+          </div>
+        </div>
+      </div>
+
+      <!-- Detalle del empleado -->
+      <details style="margin-top:8px">
+        <summary style="cursor:pointer;font-size:13px;color:var(--muted);font-family:var(--mono);padding:6px 0">
+          Ver detalle del empleado (${r.emp.entries.length} registros)
+        </summary>
+        <div class="table-wrap" style="margin-top:10px">
+          <table>
+            <tr><th>FECHA</th><th>TIPO</th><th>CONCEPTO</th><th>MONTO</th></tr>
+            ${r.emp.entries.length===0
+              ? `<tr><td colspan="4" style="color:var(--muted);text-align:center">Sin registros</td></tr>`
+              : [...r.emp.entries].reverse().map(tx=>`
+              <tr>
+                <td style="font-family:var(--mono);font-size:12px">${fmtDate(tx.date)}</td>
+                <td><span class="badge ${tx.is_income?'badge-income':'badge-expense'}">${tx.is_income?'INGRESO':'ADELANTO'}</span></td>
+                <td>${tx.concept||''}</td>
+                <td style="font-family:var(--mono);color:${tx.is_income?'var(--success)':'var(--danger)'}">Bs ${fmt(tx.amount)}</td>
+              </tr>`).join('')}
+          </table>
+        </div>
+      </details>
+
+      <!-- Detalle de la trabajadora -->
+      <details style="margin-top:8px">
+        <summary style="cursor:pointer;font-size:13px;color:var(--muted);font-family:var(--mono);padding:6px 0">
+          Ver detalle de ${r.name} (${(r.ext.entries||[]).length} registros)
+        </summary>
+        <div class="table-wrap" style="margin-top:10px">
+          <table>
+            <tr><th>FECHA</th><th>TIPO</th><th>CONCEPTO</th><th>MONTO</th></tr>
+            ${!r.ext.entries || r.ext.entries.length===0
+              ? `<tr><td colspan="4" style="color:var(--muted);text-align:center">Sin registros propios — no tiene usuario externo</td></tr>`
+              : [...r.ext.entries].reverse().map(e=>`
+              <tr>
+                <td style="font-family:var(--mono);font-size:12px">${fmtDate(e.date)}</td>
+                <td><span class="badge ${e.is_income?'badge-income':'badge-expense'}">${e.is_income?'INGRESO':'EGRESO'}</span></td>
+                <td>${e.concept||''}</td>
+                <td style="font-family:var(--mono);color:${e.is_income?'var(--success)':'var(--danger)'}">Bs ${fmt(e.amount)}</td>
+              </tr>`).join('')}
+          </table>
+        </div>
+      </details>
+    </div>`).join('')}
+  </div>`;
+}
+
+function cotejoNav(dir) {
+  currentWeek = dir<0 ? prevWeek(currentWeek) : nextWeek(currentWeek);
+  renderTab('cotejo');
+}
 
 // ============================================================
 // INIT
