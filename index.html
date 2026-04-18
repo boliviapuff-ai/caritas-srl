@@ -884,171 +884,151 @@ async function resetPass(id) {
 }
 
 // ============================================================
-// MY TRANSACTIONS (employee)
+// MY TRANSACTIONS (employee) — VISTA SIMPLE
 // ============================================================
 async function renderMyTransactions() {
   const u = currentUser;
   const wk = currentWeek;
   const txs = await sb('transactions','GET',null,`?user_id=eq.${u.id}&week_key=eq.${wk}&order=date.asc`);
-  const income = txs.filter(t=>t.is_income).reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const income  = txs.filter(t=>t.is_income).reduce((s,t)=>s+parseFloat(t.amount||0),0);
   const expense = txs.filter(t=>!t.is_income).reduce((s,t)=>s+parseFloat(t.amount||0),0);
   const isAdmin = currentUser.role==='admin';
+
   return `
-  <div class="section">
-    <div class="sec-header">
-      <div class="sec-title">Mis Movimientos</div>
-      <div class="week-nav">
-        <button onclick="myNav(-1)">&#x2039;</button>
-        <span class="week-label">${weekLabel(wk)}</span>
-        <button onclick="myNav(1)">&#x203a;</button>
-      </div>
+  <div style="max-width:600px;margin:0 auto;padding:8px">
+
+    <!-- Semana -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <button onclick="myNav(-1)" style="background:none;border:1.5px solid #ccc;border-radius:8px;padding:6px 14px;font-size:18px;cursor:pointer;color:var(--text)">‹</button>
+      <span style="font-family:var(--mono);font-size:14px;color:var(--muted)">${weekLabel(wk)}</span>
+      <button onclick="myNav(1)" style="background:none;border:1.5px solid #ccc;border-radius:8px;padding:6px 14px;font-size:18px;cursor:pointer;color:var(--text)">›</button>
     </div>
-    <div class="grid-3" style="margin-bottom:16px">
-      <div class="card"><div class="card-title">INGRESOS</div><div class="card-value income">Bs ${fmt(income)}</div></div>
-      <div class="card"><div class="card-title">EGRESOS</div><div class="card-value expense">Bs ${fmt(expense)}</div></div>
-      <div class="card"><div class="card-title">BALANCE</div><div class="card-value balance">Bs ${fmt(income-expense)}</div></div>
-    </div>
-    <div class="card" style="margin-bottom:14px;border-left:3px solid var(--success)">
-      <div style="font-weight:700;margin-bottom:14px;color:var(--success)">&#x2191; Registrar Ingreso</div>
-      <div class="form-row">
-        <div class="field" style="flex:0 0 130px">
-          <label>FECHA</label>
-          <input type="date" id="inDate" value="${today()}" ${isAdmin?'':'readonly style="pointer-events:none;opacity:0.6;"'}>
-        </div>
-        <div class="field">
-          <label>TRABAJADORA</label>
-          <select id="inWorker">
-            <option value="">-- Sin trabajadora --</option>
-            ${WORKER_NAMES.map(n=>`<option>${n}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field">
-          <label>SERVICIO</label>
-          <select id="inService">${INCOME_TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
-        </div>
-        <div class="field" style="flex:0 0 120px">
-          <label>MONTO (Bs)</label>
-          <input type="number" id="inAmount" placeholder="0.00" min="0">
-        </div>
-        <button class="btn btn-sm btn-success" style="height:38px;white-space:nowrap" onclick="addIncome()">+ Ingreso</button>
-      </div>
-    </div>
-    <div class="card" style="margin-bottom:14px;border-left:3px solid var(--danger)">
-      <div style="font-weight:700;margin-bottom:14px;color:var(--danger)">&#x2193; Registrar Egreso del negocio</div>
-      <div class="form-row">
-        <div class="field" style="flex:0 0 130px">
-          <label>FECHA</label>
-          <input type="date" id="expDate" value="${today()}" ${isAdmin?'':'readonly style="pointer-events:none;opacity:0.6;"'}>
-        </div>
-        <div class="field">
-          <label>CONCEPTO DEL GASTO</label>
-          <input type="text" id="expConcept" placeholder="Ej: transporte, comida, materiales...">
-        </div>
-        <div class="field" style="flex:0 0 120px">
-          <label>MONTO (Bs)</label>
-          <input type="number" id="expAmount" placeholder="0.00" min="0">
-        </div>
-        <button class="btn btn-sm btn-danger" style="height:38px;white-space:nowrap" onclick="addExpense()">+ Egreso</button>
+
+    <!-- Resumen simple -->
+    <div style="background:var(--surface);border-radius:16px;padding:20px;margin-bottom:20px;border:1px solid var(--border)">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:4px;font-family:var(--mono)">DINERO QUE ENTRÓ ESTA SEMANA</div>
+      <div style="font-size:36px;font-weight:800;color:var(--success);font-family:var(--mono)">Bs ${fmt(income)}</div>
+      <div style="height:1px;background:var(--border);margin:14px 0"></div>
+      <div style="display:flex;justify-content:space-between;font-size:14px">
+        <span style="color:var(--muted)">Gastos anotados</span>
+        <span style="color:var(--danger);font-family:var(--mono);font-weight:700">− Bs ${fmt(expense)}</span>
       </div>
     </div>
 
-    <div class="card" style="margin-bottom:16px;border-left:3px solid var(--accent2)">
-      <div style="font-weight:700;margin-bottom:4px;color:var(--accent2)">&#x1F4B8; Adelanto / Gasto de Trabajadora</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Se descuenta automáticamente del saldo de la chica en Personal Externo</div>
-      <div class="form-row">
-        <div class="field" style="flex:0 0 130px">
-          <label>FECHA</label>
-          <input type="date" id="advDate" value="${today()}" ${isAdmin?'':'readonly style="pointer-events:none;opacity:0.6;"'}>
-        </div>
-        <div class="field" style="flex:0 0 160px">
-          <label>TRABAJADORA</label>
-          <select id="advWorker">
-            <option value="">-- Selecciona --</option>
-            ${WORKER_NAMES.map(n=>`<option>${n}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field">
-          <label>CONCEPTO</label>
-          <input type="text" id="advConcept" placeholder="Ej: adelanto, comida, taxi, medicamentos...">
-        </div>
-        <div class="field" style="flex:0 0 120px">
-          <label>MONTO (Bs)</label>
-          <input type="number" id="advAmount" placeholder="0.00" min="0">
-        </div>
-        <button class="btn btn-sm" style="height:38px;white-space:nowrap;background:var(--accent2);color:#000;font-weight:700;border:none;border-radius:8px;cursor:pointer;padding:7px 14px;font-family:var(--font)" onclick="addWorkerAdvance()">+ Registrar</button>
+    <!-- BLOQUE 1: Anotar ingreso de una chica -->
+    <div style="background:var(--surface);border-radius:16px;padding:20px;margin-bottom:14px;border:1px solid var(--border)">
+      <div style="font-size:16px;font-weight:800;margin-bottom:16px">
+        💰 ¿Cuánto ganó una chica?
       </div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)">¿QUIÉN?</div>
+        <select id="inWorker" style="width:100%;padding:12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;font-family:var(--font)">
+          <option value="">-- Selecciona la chica --</option>
+          ${WORKER_NAMES.map(n=>`<option>${n}</option>`).join('')}
+        </select>
+      </div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)">¿QUÉ TIPO DE SERVICIO?</div>
+        <select id="inService" style="width:100%;padding:12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;font-family:var(--font)">
+          ${INCOME_TYPES.map(t=>`<option>${t}</option>`).join('')}
+        </select>
+      </div>
+      ${isAdmin ? `<div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)">FECHA</div>
+        <input type="date" id="inDate" value="${today()}" style="width:100%;padding:12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px">
+      </div>` : `<input type="hidden" id="inDate" value="${today()}">`}
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)">¿CUÁNTO? (Bs)</div>
+        <input type="number" id="inAmount" placeholder="0" min="0"
+          style="width:100%;padding:14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:22px;font-family:var(--mono);font-weight:700">
+      </div>
+      <button onclick="addIncome()" style="width:100%;padding:16px;border-radius:12px;border:none;background:var(--success);color:#000;font-size:16px;font-weight:800;cursor:pointer;font-family:var(--font)">
+        ✓ Guardar ingreso
+      </button>
     </div>
 
-        <div class="table-wrap">
-      <table>
-        <tr><th>FECHA</th><th>TIPO</th><th>TRABAJADORA</th><th>CONCEPTO</th><th>MONTO</th></tr>
-        ${txs.length===0
-          ? `<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:20px">Sin movimientos esta semana</td></tr>`
-          : [...txs].reverse().map(tx=>{
+    <!-- BLOQUE 2: Anotar gasto del negocio -->
+    <div style="background:var(--surface);border-radius:16px;padding:20px;margin-bottom:14px;border:1px solid var(--border)">
+      <div style="font-size:16px;font-weight:800;margin-bottom:16px">
+        🧾 ¿Hubo un gasto del negocio?
+      </div>
+      ${isAdmin ? `<div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)">FECHA</div>
+        <input type="date" id="expDate" value="${today()}" style="width:100%;padding:12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px">
+      </div>` : `<input type="hidden" id="expDate" value="${today()}">`}
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)">¿EN QUÉ SE GASTÓ?</div>
+        <input type="text" id="expConcept" placeholder="Ej: transporte, comida, limpieza..."
+          style="width:100%;padding:12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;font-family:var(--font)">
+      </div>
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)">¿CUÁNTO? (Bs)</div>
+        <input type="number" id="expAmount" placeholder="0" min="0"
+          style="width:100%;padding:14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:22px;font-family:var(--mono);font-weight:700">
+      </div>
+      <button onclick="addExpense()" style="width:100%;padding:16px;border-radius:12px;border:none;background:var(--danger);color:#fff;font-size:16px;font-weight:800;cursor:pointer;font-family:var(--font)">
+        ✓ Guardar gasto
+      </button>
+    </div>
+
+    <!-- BLOQUE 3: Adelanto a una chica -->
+    <div style="background:var(--surface);border-radius:16px;padding:20px;margin-bottom:20px;border:1px solid var(--border)">
+      <div style="font-size:16px;font-weight:800;margin-bottom:6px">💸 ¿Le diste plata a una chica?</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Adelanto, comida, taxi u otro gasto de ella</div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)">¿A QUIÉN?</div>
+        <select id="advWorker" style="width:100%;padding:12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;font-family:var(--font)">
+          <option value="">-- Selecciona la chica --</option>
+          ${WORKER_NAMES.map(n=>`<option>${n}</option>`).join('')}
+        </select>
+      </div>
+      ${isAdmin ? `<div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)">FECHA</div>
+        <input type="date" id="advDate" value="${today()}" style="width:100%;padding:12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px">
+      </div>` : `<input type="hidden" id="advDate" value="${today()}">`}
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)">¿PARA QUÉ? (adelanto, comida, taxi...)</div>
+        <input type="text" id="advConcept" placeholder="Ej: adelanto, almuerzo, pasaje..."
+          style="width:100%;padding:12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;font-family:var(--font)">
+      </div>
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)">¿CUÁNTO? (Bs)</div>
+        <input type="number" id="advAmount" placeholder="0" min="0"
+          style="width:100%;padding:14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:22px;font-family:var(--mono);font-weight:700">
+      </div>
+      <button onclick="addWorkerAdvance()" style="width:100%;padding:16px;border-radius:12px;border:none;background:var(--accent2);color:#000;font-size:16px;font-weight:800;cursor:pointer;font-family:var(--font)">
+        ✓ Guardar adelanto
+      </button>
+    </div>
+
+    <!-- HISTORIAL simple -->
+    <div style="background:var(--surface);border-radius:16px;padding:20px;border:1px solid var(--border)">
+      <div style="font-size:16px;font-weight:800;margin-bottom:16px">📋 Lo que se anotó esta semana</div>
+      ${txs.length===0
+        ? `<div style="color:var(--muted);text-align:center;padding:20px;font-size:14px">Aún no hay nada anotado esta semana</div>`
+        : [...txs].reverse().map(tx => {
             const isAdvance = !tx.is_income && tx.worker_name;
+            const color = tx.is_income ? 'var(--success)' : 'var(--danger)';
+            const icon  = tx.is_income ? '↑' : isAdvance ? '💸' : '↓';
+            const label = tx.is_income ? 'Ingreso' : isAdvance ? 'Adelanto' : 'Gasto';
             return `
-          <tr style="${isAdvance?'background:rgba(247,196,106,0.05)':''}">
-            <td style="font-family:var(--mono);font-size:12px">${fmtDate(tx.date)}</td>
-            <td>
-              ${tx.is_income
-                ? `<span class="badge badge-income">INGRESO</span>`
-                : isAdvance
-                  ? `<span class="badge" style="background:rgba(247,196,106,0.2);color:var(--accent2)">ADELANTO</span>`
-                  : `<span class="badge badge-expense">EGRESO</span>`
-              }
-            </td>
-            <td style="font-weight:${tx.worker_name?'700':'400'};color:${tx.worker_name?'var(--accent2)':'var(--muted)'}">${tx.worker_name||'—'}</td>
-            <td>${tx.concept||''}</td>
-            <td style="font-family:var(--mono);color:${tx.is_income?'var(--success)':'var(--danger)'}">Bs ${fmt(tx.amount)}</td>
-          </tr>`}).join('')}
-      </table>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)">
+              <div style="display:flex;align-items:center;gap:12px">
+                <div style="width:36px;height:36px;border-radius:50%;background:${tx.is_income?'#6af7b020':isAdvance?'#f7c46a20':'#f76a6a20'};
+                     display:flex;align-items:center;justify-content:center;font-size:16px">${icon}</div>
+                <div>
+                  <div style="font-size:14px;font-weight:700">${tx.worker_name ? tx.worker_name+' — ' : ''}${tx.concept||label}</div>
+                  <div style="font-size:12px;color:var(--muted);font-family:var(--mono)">${fmtDate(tx.date)} · ${label}</div>
+                </div>
+              </div>
+              <div style="font-family:var(--mono);font-weight:800;font-size:16px;color:${color}">
+                ${tx.is_income?'+':'−'} Bs ${fmt(tx.amount)}
+              </div>
+            </div>`;
+          }).join('')}
     </div>
+
   </div>`;
-}
-
-async function addIncome() {
-  const u = currentUser;
-  const wk = currentWeek;
-  const isAdmin = currentUser.role==='admin';
-  const dateEl = document.getElementById('inDate');
-  const date = (isAdmin && dateEl && dateEl.value) ? dateEl.value : today();
-  const workerName = document.getElementById('inWorker')?.value || '';
-  const service = document.getElementById('inService')?.value || '';
-  const amount = parseFloat(document.getElementById('inAmount')?.value)||0;
-  if (amount<=0) { alert('Ingresa un monto válido.'); return; }
-  const concept = workerName ? `${workerName} - ${service}` : service;
-  await sb('transactions','POST',{
-    id: genId(), user_id: u.id, week_key: wk, date, concept, amount, is_income: true,
-    worker_name: workerName || null
-  });
-  if (workerName) {
-    const workerUser = allUsers.find(usr => usr.role==='external' && usr.name.toLowerCase()===workerName.toLowerCase());
-    if (workerUser) {
-      await sb('external_ledger','POST',{ id: genId(), user_id: workerUser.id, date, concept: service, amount, is_income: true });
-    }
-  }
-  document.getElementById('inAmount').value='';
-  renderTab('myTransactions');
-}
-
-async function addExpense() {
-  const u = currentUser;
-  const wk = currentWeek;
-  const isAdmin = currentUser.role==='admin';
-  const dateEl = document.getElementById('expDate');
-  const date = (isAdmin && dateEl && dateEl.value) ? dateEl.value : today();
-  const concept = document.getElementById('expConcept')?.value.trim()||'';
-  const amount = parseFloat(document.getElementById('expAmount')?.value)||0;
-  if (!concept||amount<=0) { alert('Ingresa concepto y monto.'); return; }
-  const txs = await sb('transactions','GET',null,`?user_id=eq.${u.id}&week_key=eq.${wk}&is_income=eq.false`);
-  const spent = txs.reduce((s,t)=>s+parseFloat(t.amount||0),0);
-  if (spent+amount>WEEKLY_BUDGET) {
-    if (!confirm(`Este gasto supera el presupuesto semanal de Bs ${fmt(WEEKLY_BUDGET)}. ¿Continuar?`)) return;
-  }
-  await sb('transactions','POST',{ id: genId(), user_id: u.id, week_key: wk, date, concept, amount, is_income: false, worker_name: null });
-  document.getElementById('expConcept').value='';
-  document.getElementById('expAmount').value='';
-  renderTab('myTransactions');
 }
 
 function myNav(dir) { currentWeek = dir<0 ? prevWeek(currentWeek) : nextWeek(currentWeek); renderTab('myTransactions'); }
@@ -1140,58 +1120,92 @@ let extSelectedDate = today();
 async function renderExternalSelf() {
   const u = currentUser;
   const isAdmin = currentUser.role==='admin';
-  const entries = await sb('external_ledger','GET',null,`?user_id=eq.${u.id}&date=eq.${extSelectedDate}`);
-  const dayInc = entries.filter(e=>e.is_income).reduce((s,e)=>s+parseFloat(e.amount||0),0);
-  const dayExp = entries.filter(e=>!e.is_income).reduce((s,e)=>s+parseFloat(e.amount||0),0);
-  const commission = dayInc*0.5;
-  const saldo = commission - dayExp;
+  // Traer todos los registros del usuario (no solo hoy)
+  const allEntries = await sb('external_ledger','GET',null,`?user_id=eq.${u.id}&order=date.desc`);
+  const todayEntries = allEntries.filter(e=>e.date===extSelectedDate);
+  const dayInc    = todayEntries.filter(e=>e.is_income).reduce((s,e)=>s+parseFloat(e.amount||0),0);
+  const dayExp    = todayEntries.filter(e=>!e.is_income).reduce((s,e)=>s+parseFloat(e.amount||0),0);
+  const commission= dayInc*0.5;
+  const saldo     = commission - dayExp;
+  const totalInc  = allEntries.filter(e=>e.is_income).reduce((s,e)=>s+parseFloat(e.amount||0),0);
+  const totalExp  = allEntries.filter(e=>!e.is_income).reduce((s,e)=>s+parseFloat(e.amount||0),0);
+  const totalSaldo= totalInc*0.5 - totalExp;
+
   return `
-  <div class="section">
-    <div class="sec-title" style="margin-bottom:16px">Mi Hoja Diaria</div>
-    <div class="card" style="margin-bottom:16px">
-      <div class="form-row" style="margin-bottom:8px">
-        <div class="field" style="flex:0 0 160px">
-          <label>FECHA</label>
-          <input type="date" id="extDate" value="${extSelectedDate}" ${isAdmin ? 'onchange="changeExtDate(this.value)"' : 'readonly style="pointer-events:none;opacity:0.6;"'}>
-        </div>
-        <div class="field">
-          <label>TIPO</label>
-          <select id="extType">
-            <option value="income">Ingreso generado</option>
-            <option value="expense">Egreso / Adelanto</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>CONCEPTO</label>
-          <input type="text" id="extConcept" placeholder="Descripción">
-        </div>
-        <div class="field" style="flex:0 0 120px">
-          <label>MONTO (Bs)</label>
-          <input type="number" id="extAmount" placeholder="0.00" min="0">
-        </div>
-        <button class="btn btn-primary btn-sm" style="height:38px;white-space:nowrap" onclick="addExtEntry()">Agregar</button>
+  <div style="max-width:560px;margin:0 auto;padding:8px">
+
+    <!-- Saludo -->
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:22px;font-weight:800">Hola, ${u.name} 👋</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px">Tu saldo total acumulado</div>
+      <div style="font-size:42px;font-weight:800;font-family:var(--mono);color:${totalSaldo>=0?'var(--success)':'var(--danger)'};margin-top:4px">
+        Bs ${fmt(totalSaldo)}
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">
+        Comisión total: Bs ${fmt(totalInc*0.5)} — Adelantos: Bs ${fmt(totalExp)}
       </div>
     </div>
-    <div class="grid-4" style="margin-bottom:16px">
-      <div class="card"><div class="card-title">PRODUCIDO HOY</div><div class="card-value income">Bs ${fmt(dayInc)}</div></div>
-      <div class="card"><div class="card-title">COMISIÓN (50%)</div><div class="card-value" style="color:var(--accent2)">Bs ${fmt(commission)}</div></div>
-      <div class="card"><div class="card-title">EGRESOS</div><div class="card-value expense">Bs ${fmt(dayExp)}</div></div>
-      <div class="card"><div class="card-title">SALDO</div><div class="card-value ${saldo>=0?'income':'expense'}">Bs ${fmt(saldo)}</div></div>
+
+    <!-- Anotar cuánto gané hoy -->
+    <div style="background:var(--surface);border-radius:16px;padding:20px;margin-bottom:14px;border:1px solid var(--border)">
+      <div style="font-size:16px;font-weight:800;margin-bottom:6px">💰 ¿Cuánto gané hoy?</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Anota lo que produjiste</div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)">¿QUÉ HICE?</div>
+        <input type="text" id="extConcept" placeholder="Ej: video llamada, contenido, salida..."
+          style="width:100%;padding:12px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;font-family:var(--font)">
+      </div>
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)">¿CUÁNTO? (Bs)</div>
+        <input type="number" id="extAmount" placeholder="0" min="0"
+          style="width:100%;padding:14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:22px;font-family:var(--mono);font-weight:700">
+      </div>
+      <input type="hidden" id="extType" value="income">
+      <input type="hidden" id="extDate" value="${extSelectedDate}">
+      <button onclick="addExtEntry()" style="width:100%;padding:16px;border-radius:12px;border:none;background:var(--success);color:#000;font-size:16px;font-weight:800;cursor:pointer;font-family:var(--font)">
+        ✓ Guardar lo que gané
+      </button>
     </div>
-    <div class="table-wrap">
-      <table>
-        <tr><th>CONCEPTO</th><th>INGRESO</th><th>EGRESO</th><th>COMISIÓN</th></tr>
-        ${entries.length===0
-          ? `<tr><td colspan="4" style="color:var(--muted);text-align:center">Sin registros hoy</td></tr>`
-          : entries.map(e=>`
-          <tr>
-            <td>${e.concept||''}</td>
-            <td style="font-family:var(--mono);color:var(--success)">${e.is_income?'Bs '+fmt(e.amount):'—'}</td>
-            <td style="font-family:var(--mono);color:var(--danger)">${!e.is_income?'Bs '+fmt(e.amount):'—'}</td>
-            <td style="font-family:var(--mono);color:var(--accent2)">${e.is_income?'Bs '+fmt(parseFloat(e.amount||0)*0.5):'—'}</td>
-          </tr>`).join('')}
-      </table>
+
+    <!-- Resumen de hoy -->
+    ${dayInc > 0 || dayExp > 0 ? `
+    <div style="background:var(--surface);border-radius:16px;padding:20px;margin-bottom:14px;border:1px solid var(--border)">
+      <div style="font-size:15px;font-weight:800;margin-bottom:14px">📊 Resumen de hoy</div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--muted)">Lo que produje</span>
+        <span style="font-family:var(--mono);font-weight:700;color:var(--success)">Bs ${fmt(dayInc)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--muted)">Mi comisión (50%)</span>
+        <span style="font-family:var(--mono);font-weight:700;color:var(--accent2)">Bs ${fmt(commission)}</span>
+      </div>
+      ${dayExp>0?`<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--muted)">Adelantos/gastos</span>
+        <span style="font-family:var(--mono);font-weight:700;color:var(--danger)">− Bs ${fmt(dayExp)}</span>
+      </div>`:''}
+      <div style="display:flex;justify-content:space-between;padding:12px 0">
+        <span style="font-weight:800">Mi saldo de hoy</span>
+        <span style="font-family:var(--mono);font-weight:800;font-size:18px;color:${saldo>=0?'var(--success)':'var(--danger)'}">Bs ${fmt(saldo)}</span>
+      </div>
+    </div>` : ''}
+
+    <!-- Historial reciente -->
+    <div style="background:var(--surface);border-radius:16px;padding:20px;border:1px solid var(--border)">
+      <div style="font-size:15px;font-weight:800;margin-bottom:14px">📋 Mis registros recientes</div>
+      ${allEntries.length===0
+        ? `<div style="color:var(--muted);text-align:center;padding:20px;font-size:14px">Aún no tienes registros</div>`
+        : allEntries.slice(0,15).map(e=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-size:14px;font-weight:700">${e.concept||''}</div>
+            <div style="font-size:12px;color:var(--muted);font-family:var(--mono)">${fmtDate(e.date)} · ${e.is_income?'Ingreso':'Egreso'}</div>
+          </div>
+          <div style="font-family:var(--mono);font-weight:800;font-size:15px;color:${e.is_income?'var(--success)':'var(--danger)'}">
+            ${e.is_income?'+':'−'} Bs ${fmt(e.amount)}
+          </div>
+        </div>`).join('')}
     </div>
+
   </div>`;
 }
 function changeExtDate(val) { extSelectedDate=val; renderTab('externalSelf'); }
